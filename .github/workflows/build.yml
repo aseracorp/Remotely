@@ -1,5 +1,7 @@
 # IMPORTANT:
-# 1. The Server Runtime Identifier determines the target operating system
+# 1. The Server URL must include the scheme (e.g. https://app.remotely.one).
+
+# 2. The Server Runtime Identifier determines the target operating system
 # for which to build the server.  The default "linux-x64" will usually work
 # for most Linux-based operating systems.  You can see a full list at
 # https://docs.microsoft.com/en-us/dotnet/core/rid-catalog.
@@ -21,6 +23,9 @@ name: Build
 on:
   workflow_dispatch:
     inputs:
+      serverUrl:
+        description: 'https://remotely.asera.ch'     
+        required: true
       rid:
         description: 'Server Runtime Identifier'     
         required: false
@@ -30,7 +35,7 @@ jobs:
 
   build-mac:
   
-    runs-on: macos-10.15
+    runs-on: macos-latest
   
     steps:
       - name: Checkout
@@ -71,7 +76,7 @@ jobs:
           Compress-Archive -Path "./Agent/bin/publish/*" -DestinationPath "./Agent/bin/Remotely-MacOS-x64.zip" -Force
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           path: ./Agent/bin/Remotely-MacOS-x64.zip
           name: Mac-Agent-x64
@@ -96,9 +101,18 @@ jobs:
       with:
         # Comment out the below 'repository' line if you want to build from
         # your fork instead of the author's.
-        repository: immense/Remotely
+        repository: aseracorp/Remotely
         submodules: recursive
         fetch-depth: 0
+
+    # Test the Server URL to make sure it's valid
+    - name: Check Server URL Format
+      run: |
+        $Result = ""
+        if (![System.Uri]::TryCreate($env:ServerUrl, [System.UriKind]::Absolute, [ref] $Result)) {
+            throw "Server URL is not in the correct format.  It should be fully qualified with scheme and host (e.g. https://app.remotely.one)."
+        }
+        
         
     # Install the .NET Core workload
     - name: Install .NET Core
@@ -148,7 +162,7 @@ jobs:
         
         
     - name: Download macOS x64 Agent
-      uses: actions/download-artifact@v2.1.1
+      uses: actions/download-artifact@v4
       with:
         name: Mac-Agent-x64
         path: ./Server/wwwroot/Content/
@@ -157,11 +171,11 @@ jobs:
     - name: Run Publish script
       shell: powershell
       run: |
-        .\Utilities\Publish.ps1 -CertificatePath "$env:GITHUB_WORKSPACE\GitHubActionsWorkflow.pfx" -CertificatePassword $env:PfxKey -CurrentVersion $env:CurrentVersion -RID ${{ github.event.inputs.rid }} -OutDir "$env:GITHUB_WORKSPACE\publish"
+        .\Utilities\Publish.ps1 -CertificatePath "$env:GITHUB_WORKSPACE\GitHubActionsWorkflow.pfx" -CertificatePassword $env:PfxKey -Hostname $env:ServerUrl -CurrentVersion $env:CurrentVersion -RID ${{ github.event.inputs.rid }} -OutDir "$env:GITHUB_WORKSPACE\publish"
         
     # Upload build artifact to be deployed from Ubuntu runner
     - name: Upload build artifact
-      uses: actions/upload-artifact@v3.1.2
+      uses: actions/upload-artifact@v4
       with:
         path: ./publish/
         name: Server
